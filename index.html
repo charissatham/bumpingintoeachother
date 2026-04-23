@@ -13,7 +13,7 @@
   justify-content: center;
   align-items: center;
   height: 100vh;
-  background: #89CFF0;
+  background: #C2EEFF;
 ">
 <div id="game-container"></div>
 
@@ -78,19 +78,17 @@ this.confetti = particles.createEmitter({
     0xcdb4db
   ],
 
-  quantity: 0 // IMPORTANT for explode()
+  quantity: 0
 });
   }
 
 
   update(time, delta) {
 
-    // ✅ FIX: prevent spam
     if (Phaser.Input.Keyboard.JustDown(this.keyW) && !this.isPunching) {
       this.playPunch();
     }
 
-    // ✅ FIX: stop movement while punching
     if (!this.isPunching) {
       this.handleMovement(delta);
     }
@@ -260,12 +258,10 @@ handleRunawayButton() {
   );
 
   if (d < 100) {
-    // move away randomly
     this.noBtn.x += Phaser.Math.Between(-40, 40);
     this.noBtn.y += Phaser.Math.Between(-40, 40);
 
-    // 👇 CLAMP within screen
-    const margin = 80; // prevents edge clipping
+    const margin = 80;
 
     this.noBtn.x = Phaser.Math.Clamp(
       this.noBtn.x,
@@ -304,7 +300,6 @@ playIdle(char) {
     char.play(key, true);
   }
 }
-  // ✅ FIXED animation generator
   createAnimations() {
     const make = (key, rate) => {
       this.anims.create({
@@ -448,7 +443,6 @@ startDialogue() {
   // make interactive
   button.setInteractive();
 
-  // 👇 PRESS EFFECT
   button.on("pointerdown", () => {
     container.y += 3; // push down
   });
@@ -500,7 +494,6 @@ yes.button.on('pointerdown', () => {
   this.hideButtons();
   this.dialogueActive = false; 
 
- // 👇 REMOVE DIALOGUE
   this.playerBubble.container.setVisible(false);
   this.npcBubble.container.setVisible(false);
 
