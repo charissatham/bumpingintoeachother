@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Habbo Polished Final</title>
+<script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
+</head>
+
+<body style="
+  margin: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  background: #e8f7d4;
+">
+<div id="game-container"></div>
+
+<script>
+class MainScene extends Phaser.Scene {
+
+  constructor() {
+    super("main");
+    this.hasFaced = false;
+    this.isPunching = false;  
+    this.isDancing = false; 
+  }
+
+  preload() {
+    this.load.spritesheet('aly_idle_down', 'Aly-iso_idle_down-v1.png', { frameWidth: 256, frameHeight: 256 });
+    this.load.spritesheet('aly_walk_right', 'Aly-iso_walk_right-v1.png', { frameWidth: 256, frameHeight: 256 });
+    this.load.spritesheet('char_idle_down', 'Charissa-iso_idle_down-v1.png', { frameWidth: 256, frameHeight: 256 });
+    this.load.spritesheet('char_walk_right', 'Charissa-iso_walk_right-v1.png', { frameWidth: 256, frameHeight: 256 });
+    this.load.spritesheet('aly_punch', 'Aly-iso_custom_punch_right-v1.png',{ frameWidth: 256, frameHeight: 256 });
+    this.load.spritesheet('char_hit','Charissa-hit_react-v2.png',{ frameWidth: 256, frameHeight: 256 });
+    this.load.spritesheet('aly_shimmy','Aly-shimmy-v1.png',{ frameWidth: 256, frameHeight: 256 });
+    this.load.spritesheet('char_shimmy','Charissa-shimmy-v2.png',{ frameWidth: 256, frameHeight: 256 });
+  }
+
+  create() {
+    this.createAnimations();
+    this.cameras.main.setBackgroundColor('#d8f5c0');
+
+    this.initCharacters();
+    this.initUI();
+    this.initLabels();
+
+    this.dialogueActive = false;
+    this.dialoguePlayed = false;
+    this.keyW = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W);
+ this.textures.generate('confetti', {
+  data: ['1'],
+  pixelWidth: 6,
+  pixelHeight: 6
+});
+
+const particles = this.add.particles('confetti');
+
+this.confetti = particles.createEmitter({
+  speed: { min: 200, max: 500 },
+  angle: { min: 0, max: 360 },
+
+  gravityY: 600,
+  lifespan: { min: 1000, max: 2000 },
+
+  scale: { start: 1, end: 0.6 },
+  rotate: { min: 0, max: 360 },
+  angularVelocity: { min: -200, max: 200 },
+
+  drag: { x: 200, y: 0 },
+
+  tint: [
+    0xff6b6b,
+    0xffd93d,
+    0x6bcBef,
+    0xa0e7e5,
+    0xcdb4db
+  ],
+
+  quantity: 0 // IMPORTANT for explode()
+});
+  }
+
+
+  update(time, delta) {
+
+    // ✅ FIX: prevent spam
+    if (Phaser.Input.Keyboard.JustDown(this.keyW) && !this.isPunching) {
+      this.playPunch();
+    }
+
+    // ✅ FIX: stop movement while punching
+    if (!this.isPunching) {
+      this.handleMovement(delta);
+    }
+
+    this.updateUI();
+
+    const dist = this.getDistance();
+
+    if (dist < 120 && !this.dialogueActive) {
+      if (!this.hasFaced) {
+        this.faceEachOther();
+        this.hasFaced = true;
+      }
+    } else {
+      this.hasFaced = false;
+    }
+
+    if (dist < 100 && !this.dialogueActive && !this.dialoguePlayed) {
+      this.startDialogue();
+    }
+
+    this.handleRunawayButton();
+  if (
+  this.activeCharacter !== this.npc &&
+  !this.dialogueActive &&
+  !this.isPunching &&
+  !this.isDancing
+) {
+  if (this.npc.anims.currentAnim?.key !== 'char_idle_down') {
+    this.playIdle(this.npc);
+  }
+}
+  }
+
+  initCharacters() {
+    const centerX = this.scale.width / 2;
+    const centerY = this.scale.height * 0.55;
+    const gap = 140;
+
+    this.player = this.add.sprite(centerX - gap, centerY, 'aly_idle_down').setInteractive().setDepth(5);
+    this.npc = this.add.sprite(centerX + gap, centerY, 'char_idle_down').setInteractive().setDepth(5);
+
+    this.playIdle(this.player);
+this.playIdle(this.npc);
+
+    this.activeCharacter = this.player;
+
+    this.player.on('pointerdown', () => this.activeCharacter = this.player);
+    this.npc.on('pointerdown', () => this.activeCharacter = this.npc);
+
+    this.cursors = this.input.keyboard.createCursorKeys();
+  }
+
+  initUI() {
+    this.playerBubble = this.createBubble();
+    this.npcBubble = this.createBubble();
+    this.createButtons();
+
+    this.instructions = this.add.text(
+      this.scale.width - 20,
+      20,
+      "INSTRUCTIONS\n← → move\nw key to punch (only Aly can)\nClick to switch characters",
+      {
+        fontSize: "14px",
+        color: "#000",
+        backgroundColor: "#ffffffcc",
+        padding: { x: 10, y: 8 }
+      }
+    ).setOrigin(1, 0).setScrollFactor(0).setDepth(20);
+  }
+
+  initLabels() {
+    this.alyLabel = this.createLabel(this.player, "Aly");
+    this.charLabel = this.createLabel(this.npc, "Charissa");
+
+    this.time.delayedCall(1500, () => {
+      this.alyLabel.destroy();
+      this.charLabel.destroy();
+    });
+  }
+
+  handleMovement(delta) {
+    const speed = 160;
+    const dt = delta / 1000;
+    const char = this.activeCharacter;
+
+    let moving = false;
+
+    if (!this.dialogueActive) {
+      if (this.cursors.left.isDown) {
+        char.x -= speed * dt;
+        char.setFlipX(true);
+        this.playWalk(char);
+        moving = true;
+      } else if (this.cursors.right.isDown) {
+        char.x += speed * dt;
+        char.setFlipX(false);
+        this.playWalk(char);
+        moving = true;
+      }
+    }
+if (!this.dialogueActive && !this.isDancing) {
+  if (!moving) this.playIdle(char);
+}
+  }
+
+  // ✅ FIXED punch logic
+playPunch() {
+  this.isPunching = true;
+  this.dialogueActive = true;
+
+  this.player.play('aly_punch');
+
+  const dist = this.getDistance();
+
+  if (dist < 120) {
+
+    // 🔥 delay to sync impact moment
+    this.time.delayedCall(150, () => {
+      this.npc.play('char_hit');
+
+      this.npc.once('animationcomplete-char_hit', () => {
+        this.playIdle(this.npc);
+      });
+    });
+  }
+
+  this.player.once('animationcomplete-aly_punch', () => {
+    this.isPunching = false;
+    this.dialogueActive = false;
+    this.playIdle(this.player);
+  });
+}
+
+  faceEachOther() {
+    if (this.player.x < this.npc.x) {
+      this.player.setFlipX(false);
+      this.npc.setFlipX(true);
+    } else {
+      this.player.setFlipX(true);
+      this.npc.setFlipX(false);
+    }
+  }
+
+  getDistance() {
+    return Phaser.Math.Distance.Between(
+      this.player.x, this.player.y,
+      this.npc.x, this.npc.y
+    );
+  }
+
+  updateUI() {
+    this.updateBubble(this.playerBubble, this.player);
+    this.updateBubble(this.npcBubble, this.npc);
+
+    if (this.alyLabel) this.alyLabel.setPosition(this.player.x, this.player.y - 140);
+    if (this.charLabel) this.charLabel.setPosition(this.npc.x, this.npc.y - 140);
+  }
+
+handleRunawayButton() {
+  if (!this.noBtn || !this.noBtn.visible) return;
+
+  const pointer = this.input.activePointer;
+  const d = Phaser.Math.Distance.Between(
+    pointer.x, pointer.y,
+    this.noBtn.x, this.noBtn.y
+  );
+
+  if (d < 100) {
+    // move away randomly
+    this.noBtn.x += Phaser.Math.Between(-40, 40);
+    this.noBtn.y += Phaser.Math.Between(-40, 40);
+
+    // 👇 CLAMP within screen
+    const margin = 80; // prevents edge clipping
+
+    this.noBtn.x = Phaser.Math.Clamp(
+      this.noBtn.x,
+      margin,
+      this.scale.width - margin
+    );
+
+    this.noBtn.y = Phaser.Math.Clamp(
+      this.noBtn.y,
+      margin,
+      this.scale.height - margin
+    );
+  }
+}
+
+  createLabel(char, text) {
+    return this.add.text(char.x, char.y - 140, text, {
+      fontSize: "14px",
+      color: "#fff",
+      backgroundColor: "#595959",
+      padding: { x: 6, y: 3 }
+    }).setOrigin(0.5).setDepth(20);
+  }
+
+playWalk(char) {
+  const key = char === this.player ? 'aly_walk_right' : 'char_walk_right';
+
+  if (char.anims.currentAnim?.key !== key) {
+    char.play(key, true);
+  }
+}
+playIdle(char) {
+  const key = char === this.player ? 'aly_idle_down' : 'char_idle_down';
+
+  if (char.anims.currentAnim?.key !== key) {
+    char.play(key, true);
+  }
+}
+  // ✅ FIXED animation generator
+  createAnimations() {
+    const make = (key, rate) => {
+      this.anims.create({
+        key,
+        frames: this.anims.generateFrameNumbers(key, { start: 0, end: 4 }),
+        frameRate: rate,
+        repeat: -1
+      });
+    };
+    this.anims.create({
+  key: 'char_hit',
+  frames: this.anims.generateFrameNumbers('char_hit', { start: 10, end: 24 }),
+  frameRate: 16,
+  repeat: 0
+});
+
+    make('aly_idle_down', 4);
+    make('aly_walk_right', 12);
+    make('char_idle_down', 4);
+    make('char_walk_right', 12);
+
+    this.anims.create({
+  key: 'aly_punch',
+  frames: this.anims.generateFrameNumbers('aly_punch', { start: 0, end: 10 }),
+  frameRate: 16,
+  repeat: 0
+});
+this.anims.create({
+  key: 'aly_shimmy',
+  frames: this.anims.generateFrameNumbers('aly_shimmy', { start: 0, end: 24 }), // adjust if needed
+  frameRate: 10,
+  repeat: -1
+});
+
+this.anims.create({
+  key: 'char_shimmy',
+  frames: this.anims.generateFrameNumbers('char_shimmy', { start: 0, end: 24 }),
+  frameRate: 10,
+  repeat: -1
+});
+  }
+
+  createBubble() {
+    const g = this.add.graphics();
+    const text = this.add.text(0, 0, "", { fontSize: "14px", color: "#000", wordWrap: { width: 140 } }).setOrigin(0.5);
+    const container = this.add.container(0, 0, [g, text]).setVisible(false).setDepth(10);
+    return { container, g, text };
+  }
+
+  updateBubble(bubble, char) {
+    bubble.container.setPosition(char.x, char.y - 120);
+  }
+
+  drawBubble(b, w, h) {
+    const g = b.g;
+    g.clear();
+    g.fillStyle(0xffffff);
+    g.lineStyle(2, 0x000000);
+    g.fillRoundedRect(-w/2, -h/2, w, h, 10);
+    g.strokeRoundedRect(-w/2, -h/2, w, h, 10);
+  }
+
+  typeText(b, msg, cb) {
+    b.text.setText(msg);
+    b.container.setVisible(true);
+    this.drawBubble(b, b.text.width + 20, b.text.height + 16);
+    if (cb) cb();
+  }
+
+startDialogue() {
+  this.dialogueActive = true;
+  this.dialoguePlayed = true;
+
+  this.playIdle(this.player);
+  this.playIdle(this.npc);
+
+  this.typeText(this.npcBubble, "oh hey Aly, its been a while!!", () => {
+
+    this.time.delayedCall(3000, () => {
+      this.npcBubble.container.setVisible(false);
+
+      this.typeText(this.npcBubble, "hope you've been well", () => {
+
+        this.time.delayedCall(3000, () => {
+          this.npcBubble.container.setVisible(false);
+
+          this.typeText(this.playerBubble, "yeah, I’ve been good. it’s nice seeing you.", () => {
+
+            this.time.delayedCall(3000, () => {
+              this.playerBubble.container.setVisible(false);
+
+              this.typeText(this.npcBubble, "yeah… nice seeing you", () => {
+
+                this.time.delayedCall(3000, () => {
+
+                  this.typeText(this.npcBubble, "we should hang one of these days!", () => {
+                    this.showButtons();
+                  });
+
+                });
+
+              });
+
+            });
+
+          });
+
+        });
+
+      });
+
+    });
+
+  });
+}
+  create3DButton(x, y, label, bgColor) {
+  const width = 160;
+  const height = 50;
+
+  const container = this.add.container(x, y);
+
+  // shadow (bottom layer)
+  const shadow = this.add.rectangle(0, 4, width, height, 0x000000, 0.25)
+    .setOrigin(0.5);
+
+  // main button
+  const button = this.add.rectangle(0, 0, width, height, bgColor)
+    .setOrigin(0.5);
+
+  // outline
+  button.setStrokeStyle(2, 0x000000);
+
+  // text
+  const text = this.add.text(0, 0, label, {
+    fontSize: "18px",
+    color: "#ffffff",
+  }).setOrigin(0.5);
+
+  container.add([shadow, button, text]);
+
+  // make interactive
+  button.setInteractive();
+
+  // 👇 PRESS EFFECT
+  button.on("pointerdown", () => {
+    container.y += 3; // push down
+  });
+
+  button.on("pointerup", () => {
+    container.y -= 3; // pop back
+  });
+
+  button.on("pointerover", () => {
+    button.setFillStyle(Phaser.Display.Color.Lighten(
+      Phaser.Display.Color.ValueToColor(bgColor),
+      20
+    ).color);
+  });
+
+  button.on("pointerout", () => {
+    button.setFillStyle(bgColor);
+  });
+
+  return { container, button, text };
+
+}
+
+createButtons() {
+  const centerX = this.scale.width / 2;
+  const y = this.scale.height * 0.82;
+  const gap = 60;
+
+  // YES
+  const yes = this.create3DButton(
+    centerX - 110,
+    y,
+    "I'm down",
+    0x2e7d32
+  );
+yes.button.on('pointerdown', () => {
+  // 📩 SEND EMAIL
+  fetch("https://formspree.io/f/maqaawap", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      action: "YES_CLICKED",
+      message: "She clicked I'm down 🎉",
+      time: new Date().toLocaleString()
+    })
+  });
+  this.hideButtons();
+  this.dialogueActive = false; 
+
+ // 👇 REMOVE DIALOGUE
+  this.playerBubble.container.setVisible(false);
+  this.npcBubble.container.setVisible(false);
+
+  this.isDancing = true;
+
+  this.faceEachOther();
+
+  this.time.delayedCall(200, () => {
+    this.player.play('aly_shimmy');
+    this.npc.play('char_shimmy');
+  });
+
+this.confettiLoop = this.time.addEvent({
+  delay: 400, // every 0.4s
+  loop: true,
+  callback: () => {
+    this.confetti.explode(40, this.player.x, this.player.y - 50);
+    this.confetti.explode(40, this.npc.x, this.npc.y - 50);
+  }
+});
+this.confetti.explode(40,this.player.x + Phaser.Math.Between(-20, 20),this.player.y - 50);
+
+  this.time.delayedCall(6000, () => {
+    this.isDancing = false;
+if (this.confettiLoop) {
+  this.confettiLoop.remove();
+}
+    this.playIdle(this.player);
+    this.playIdle(this.npc);
+
+      this.dialogueActive = true;
+
+  this.typeText(this.npcBubble, "yay!!! I'll text you", () => {
+
+    // optional: auto hide after awhile
+    this.time.delayedCall(3000, () => {
+      this.npcBubble.container.setVisible(false);
+      this.dialogueActive = false;
+    });
+
+  });
+
+});
+  });
+
+
+  // NO
+  const no = this.create3DButton(
+    centerX + 110,
+    y,
+    "Nahhh",
+    0xc62828
+  );
+
+  this.yesBtn = yes.container;
+  this.noBtn = no.container;
+
+  this.yesBtn.setVisible(false);
+  this.noBtn.setVisible(false);
+}
+
+
+showButtons() {
+  this.yesBtn.setVisible(true);
+  this.noBtn.setVisible(true);
+}
+
+  hideButtons() {
+    this.yesBtn.setVisible(false);
+    this.noBtn.setVisible(false);
+  }
+}
+
+new Phaser.Game({
+  type: Phaser.AUTO,
+  width: 800,
+  height: 600,
+  parent: 'game-container',
+  pixelArt: true,
+  scene: MainScene
+});
+</script>
+
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
