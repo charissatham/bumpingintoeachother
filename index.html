@@ -13,7 +13,7 @@
   justify-content: center;
   align-items: center;
   height: 100vh;
-  background: #77C3EC;
+  background: #89CFF0;
 ">
 <div id="game-container"></div>
 
@@ -396,11 +396,11 @@ startDialogue() {
             this.time.delayedCall(3000, () => {
               this.playerBubble.container.setVisible(false);
 
-              this.typeText(this.npcBubble, "yeah… nice seeing you", () => {
+              this.typeText(this.npcBubble, "nice seeing you too", () => {
 
                 this.time.delayedCall(3000, () => {
 
-                  this.typeText(this.npcBubble, "we should hang one of these days!", () => {
+                  this.typeText(this.npcBubble, "hmm... we should hang one of these days!", () => {
                     this.showButtons();
                   });
 
